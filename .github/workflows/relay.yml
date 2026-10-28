@@ -1,0 +1,58 @@
+# Webhook relay: any repository_dispatch becomes one event on the inbox PR.
+#
+#   curl -X POST https://api.github.com/repos/OWNER/REPO/dispatches \
+#     -H "Authorization: Bearer $INBOX_DISPATCH_TOKEN" \
+#     -H "Accept: application/vnd.github+json" \
+#     -d '{"event_type":"order.shipped","client_payload":{"secret":"...","source":"shop","payload":{"order":"1234"}}}'
+#
+# "Run workflow" on the Actions tab sends a manual test event.
+name: Relay
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      type:
+        description: Event type
+        required: true
+        default: test.ping
+      source:
+        description: Source
+        required: false
+        default: manual
+      payload:
+        description: JSON payload
+        required: false
+        default: '{"hello": "world"}'
+      id:
+        description: Event id (optional, for dedupe)
+        required: false
+
+# No concurrency group on purpose: GitHub cancels queued runs in a group,
+# which would drop events that arrive in a burst.
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  relay:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Post event to the inbox
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
+          INBOX_SECRET: ${{ secrets.INBOX_SECRET }}
+          INBOX_PR: ${{ vars.INBOX_PR }}
+        run: python -m agent_inbox relay

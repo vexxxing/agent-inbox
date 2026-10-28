@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom"><title>Blog</title>
+<entry><title>Launch notes</title><link href="https://blog.example.com/a"/><id>tag:a</id><updated>2026-10-01T00:00:00Z</updated><summary>hello</summary></entry>
+</feed>

@@ -1,0 +1,32 @@
+# Run once from the Actions tab: creates the agent-inbox label, branch and
+# the inbox pull request. Running it again just reports the existing inbox.
+#
+# Needs Settings > Actions > General > "Allow GitHub Actions to create and
+# approve pull requests". Prefer not to turn that on? See README for the
+# one-line local alternative.
+name: Setup inbox
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  issues: write
+  pull-requests: write
+
+jobs:
+  setup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt
+      - name: Create the inbox
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python -m agent_inbox setup

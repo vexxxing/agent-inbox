@@ -1,0 +1,22 @@
+# Settings for the webhook relay. Every key is optional; these are the defaults.
+relay:
+  # Reject repository_dispatch events whose client_payload.secret does not
+  # match the INBOX_SECRET repository secret. Leave this on.
+  require_secret: true
+
+  # Allow the "Run workflow" button on the Relay workflow (manual test events).
+  # Only people and tokens that can run Actions in this repo can use it.
+  allow_manual: true
+
+  # Which event types and sources may reach the inbox (shell-style patterns).
+  # Narrow these to what your agent actually handles, for example
+  #   allow_types: ["order.*", "deploy.finished"]
+  allow_types: ["*"]
+  deny_types: []
+  allow_sources: ["*"]
+
+  # Bigger payloads are rejected. GitHub comments max out around 65,000 chars.
+  max_payload_bytes: 16384
+
+  # Keys removed from the payload, at any depth, before it is posted.
+  drop_fields: [secret, token, password, authorization, api_key, apikey]

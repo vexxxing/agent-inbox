@@ -1,0 +1,15 @@
+# Fire once for each new feed item whose title mentions a keyword.
+# On the first check, items already in the feed are remembered, not reported.
+name: rss-keyword
+description: New posts that mention the keyword
+enabled: false
+every: 30m
+fetch:
+  url: https://news.example.com/feed.xml
+extract:
+  rss: true
+  field: title            # title, summary, or any
+condition:
+  contains: ["release", "launch"]   # any of these, case-insensitive
+event:
+  type: feed.match

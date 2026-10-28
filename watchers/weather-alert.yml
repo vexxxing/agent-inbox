@@ -1,0 +1,16 @@
+# Fire when tomorrow's rain chance is high. Uses Open-Meteo's free public API
+# (no key). Set your own latitude and longitude, then set enabled: true.
+# Please keep "every" at an hour or more: forecasts don't change faster.
+name: weather-alert
+description: Rain likely tomorrow
+enabled: false
+every: 3h
+fetch:
+  url: https://api.open-meteo.com/v1/forecast?latitude=51.51&longitude=-0.13&daily=precipitation_probability_max&timezone=auto&forecast_days=2
+extract:
+  json: daily.precipitation_probability_max[1]
+condition:
+  at_least: 70
+event:
+  type: weather.rain_likely
+  message: Rain chance tomorrow is 70% or more

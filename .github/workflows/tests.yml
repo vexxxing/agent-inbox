@@ -1,0 +1,31 @@
+name: Tests
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: [".agent-inbox/**"]
+  pull_request:
+    # The inbox PR only adds .agent-inbox/INBOX.md, so this keeps test runs
+    # (and their check events) off the inbox.
+    paths-ignore: [".agent-inbox/**"]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Unit tests
+        run: python -m unittest discover -s tests -v
+      - name: Check watcher files and inbox.yml
+        run: python -m agent_inbox check

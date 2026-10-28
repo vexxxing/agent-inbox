@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<rss version="2.0"><channel><title>News</title>
+<item><title>Product LAUNCH next week</title><link>https://news.example.com/3</link><guid>n3</guid><description>with `backticks` and @someone</description></item>
+<item><title>Big release today</title><link>https://news.example.com/1</link><guid>n1</guid></item>
+<item><title>Weekly roundup</title><link>https://news.example.com/2</link><guid>n2</guid></item>
+</channel></rss>

@@ -1,0 +1,18 @@
+# Fire once when showtimes for a film appear on a cinema's page.
+# Replace the URL and selector with your cinema's, then set enabled: true.
+name: showtimes
+description: Tell me when tickets for the film go on sale
+enabled: false
+every: 30m
+fetch:
+  url: https://cinema.example.com/films/the-film
+extract:
+  css: ".showtime"        # each showtime on the page
+  attr: text
+  all: true               # every showtime is an item; each new one fires once
+condition:
+  exists: true
+prime: false              # also report showtimes already up on the first check
+event:
+  type: showtimes.available
+  message: New showtime listed

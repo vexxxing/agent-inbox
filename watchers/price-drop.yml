@@ -1,0 +1,16 @@
+# Fire when a price drops below a threshold. Re-arms if it goes back up.
+name: price-drop
+description: Tell me when the price is under 20
+enabled: false
+every: 1h
+fetch:
+  url: https://shop.example.com/products/example-item
+extract:
+  css: "[itemprop=price]"
+  attr: content           # read the attribute, or "text" for the visible text
+  number: true            # "$1,299.00" -> 1299.0
+condition:
+  below: 20
+event:
+  type: price.below
+  message: Price is under 20

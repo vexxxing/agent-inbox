@@ -1,0 +1,61 @@
+# Watchers: check watchers/*.yml on a schedule and post hits to the inbox.
+#
+# Off until you set the repository variable WATCHERS_ENABLED to true
+# (Settings > Secrets and variables > Actions > Variables). A skipped job
+# uses no Actions minutes.
+name: Watchers
+
+on:
+  schedule:
+    # Every 30 minutes. GitHub's shortest is every 5 minutes, and scheduled
+    # runs often start several minutes late. See README > Limits for what
+    # each choice costs in Actions minutes on a private repo.
+    - cron: "*/30 * * * *"
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Check every enabled watcher now, ignoring "every"
+        type: boolean
+        default: false
+      only:
+        description: Run only this watcher (name)
+        required: false
+
+concurrency:
+  group: agent-inbox-watchers
+  cancel-in-progress: false
+
+permissions:
+  contents: write        # save state on the agent-inbox-state branch
+  issues: write          # comment on the inbox
+  pull-requests: write
+
+jobs:
+  watch:
+    if: vars.WATCHERS_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Load state
+        run: bash scripts/state.sh load
+      - name: Check watchers
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
+          INBOX_PR: ${{ vars.INBOX_PR }}
+          FORCE: ${{ inputs.force }}
+          ONLY: ${{ inputs.only }}
+        run: |
+          args=()
+          if [ "${FORCE:-}" = "true" ]; then args+=(--force); fi
+          if [ -n "${ONLY:-}" ]; then args+=(--only "$ONLY"); fi
+          python -m agent_inbox watch --state .state/watchers.json "${args[@]}"
+      - name: Save state
+        if: always()
+        run: bash scripts/state.sh save
