@@ -84,6 +84,9 @@ gh api repos/OWNER/REPO/issues/PR_NUMBER/comments --jq '.[-1].body' | python -m 
 | `watcher.error` | the watcher runner, once, after a watcher fails 3 checks in a row (`notify_errors_after`) | `watcher`, `consecutive_errors`, `error` |
 | `test.ping` | the default manual relay run | whatever you typed |
 | `watcher.milestone` | a watcher with `notify: milestones` or `live`, when the watched value changes without being a hit | the watcher's usual fields, plus `event_type` (the type its hit would have) |
+| `repo.starred`, `repo.forked`, `repo.issue_opened`, `repo.pr_opened`, `repo.discussion`, `repo.comment`, `repo.discussion_comment` | the Repo activity workflow (source `github`) | `by` (GitHub login), `by_url`, `repository`, `url`; stars add `stars`, forks add `fork` and `forks`; issues, pull requests and discussions add `number` and `title`; comments add `on` (`issue`, `pull_request` or `discussion`) and `excerpt` (the first 200 characters) |
+| `repo.traffic` | the Repo activity workflow, hourly, when clone or view counts go up | `baseline` (true on the first check), `new` (`clones`, `cloners`, `views`, `visitors` since the last check), `last_14_days` (GitHub's totals) |
+| `repo.test` | Repo activity → Run workflow | `test: true` and a note. Not real activity |
 | `inbox.digest` | the daily digest (see `inbox.yml`) | `summary` (one line, like `3 watches, 1 new`), `since` (the previous digest's time, or null), and `watchers`: one entry per enabled watcher with `watcher`, `notify`, `last_check`, `posted` (events posted since the last digest), `status` (`ok` or `error`), `error` if failing, `held` (events a `notify: digest` watcher held back: `type`, `id`, `time`, `payload`) and `held_more` (how many more were held than listed) |
 
 Watcher events carry `watcher`, `url`, `message` (if the watcher sets one), and `value` (what was extracted). RSS events add `item` with `title`, `link`, `id`, `published` and `summary`.

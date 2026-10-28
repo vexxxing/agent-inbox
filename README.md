@@ -15,9 +15,10 @@ Most agents can only run on a schedule: wake up every hour, look around, go back
 
 - **Inbox**: one long-lived draft pull request. Every event is one comment in a standard, machine-readable format ([SPEC.md](SPEC.md)).
 - **Webhook relay**: a GitHub Actions workflow that turns any `repository_dispatch` call into an inbox event, after checking a shared secret and your filters.
+- **Repo activity** (optional): stars, forks, new issues, pull requests, discussions and comments on the repository itself become events the moment they happen.
 - **Watchers**: small YAML files that say what to fetch, what to pull out of it, and what counts as a hit. A scheduled workflow checks them and remembers what it has already reported, so nothing fires twice. No AI runs in the watchers.
 
-It's plain Python (standard library plus PyYAML and Beautiful Soup) and four workflow files. No server, no database, no paid service.
+It's plain Python (standard library plus PyYAML and Beautiful Soup) and five workflow files. No server, no database, no paid service.
 
 ## Setup (about ten minutes)
 
@@ -171,6 +172,25 @@ python -m agent_inbox check      # validates every watcher and inbox.yml
 
 Be a good citizen: keep `every` reasonable, prefer an official API or feed over scraping a page, and respect each site's terms. Pages that build their content with JavaScript won't work, because watchers fetch the raw HTML and run no browser.
 
+## Repo activity
+
+The **Repo activity** workflow turns GitHub's own events on the repository into inbox events, as they happen (GitHub starts the run; nothing polls):
+
+| Event type | When |
+|---|---|
+| `repo.starred` | someone stars the repository |
+| `repo.forked` | someone forks it |
+| `repo.issue_opened` / `repo.pr_opened` | a new issue or pull request |
+| `repo.discussion` | a new discussion (if Discussions is on) |
+| `repo.comment` / `repo.discussion_comment` | a new comment on an issue, pull request or discussion |
+| `repo.traffic` | clone or view counts went up (optional, hourly, see below) |
+
+Each event says who did it (`by`), with a link and, for issues and comments, the title and the start of the text. Your own activity, bots and anything on the inbox pull request are skipped, so the inbox never echoes itself.
+
+It's off in a copy. To turn it on, set the repository variable `REPO_ACTIVITY_ENABLED` to `true`. This repository has it on for itself, which is why its workflow names `vexxxing/agent-inbox`. **Actions → Repo activity → Run workflow** posts a `repo.test` event (marked `"test": true`) so you can check the wiring.
+
+**Clones and visitors.** GitHub's traffic API gives counts only (never who), for the last 14 days, and the default `GITHUB_TOKEN` can't read it. To get a `repo.traffic` event whenever the counts go up, add a fine-grained token with **Administration: Read-only** on this repository as the secret `TRAFFIC_TOKEN`, and set the variable `TRAFFIC_ENABLED` to `true`. The first check posts the current totals as a baseline. Counts are saved on the `agent-inbox-traffic` branch.
+
 ## Connecting an agent
 
 The inbox is just a pull request, so anything that can read pull request comments can use it.
@@ -217,7 +237,7 @@ To repeat both tests in your own copy, see [docs/live-test.md](docs/live-test.md
   GitHub Free includes 2,000 minutes a month for private repositories (check your plan's current allowance). Each webhook also costs about a minute. Public repositories don't use minutes but have other problems (see [Security](#security)). Change the schedule in `.github/workflows/watchers.yml`.
 - **Idle public repos stop.** GitHub turns off scheduled workflows in a public repository after 60 days with no repository activity.
 - **One comment per event.** A pull request with thousands of comments gets slow to load. When the inbox gets large, close it and run **Setup inbox** again; the relay always posts to the newest open pull request with the `agent-inbox` label (or to `INBOX_PR`, if you set that variable). Your agent then needs to watch the new number.
-- **Bot comments.** The workflows post as `github-actions[bot]` by default. Claude sessions watching the pull request do wake on these (checked live: a few seconds from comment to wake). If some other agent doesn't get woken by bot comments, add a repository secret `INBOX_TOKEN` with a token for another account (fine-grained, this repository only, **Pull requests: Read and write** and **Issues: Read and write**) and the workflows will post as that account instead. No workflow here listens to comments, so the inbox can't loop either way.
+- **Bot comments.** The workflows post as `github-actions[bot]` by default. Claude sessions watching the pull request do wake on these (checked live: a few seconds from comment to wake). If some other agent doesn't get woken by bot comments, add a repository secret `INBOX_TOKEN` with a token for another account (fine-grained, this repository only, **Pull requests: Read and write** and **Issues: Read and write**) and the workflows will post as that account instead. The only workflow that listens to comments, Repo activity, ignores the inbox pull request and bots, so the inbox can't loop either way.
 - **Dedupe is best effort.** The relay checks the newest 100 comments for a repeated `id`, and two events with the same id arriving in the same second can both get through. Agents should dedupe by `id` too.
 - **Run workflow needs the default branch.** Manual runs and `repository_dispatch` only work for workflow files on the default branch.
 - **Platforms and sites set limits too.** Some listeners will be refused, by an agent platform's safety checks or by a site's terms. [LIMITS.md](LIMITS.md) maps what we know.

@@ -3,6 +3,8 @@
   watch      check due watchers and post hits to the inbox (and the daily digest)
   digest     post the digest of every watcher now
   relay      turn the current Actions trigger into an inbox event
+  activity   turn a star, fork, issue, PR, discussion or comment into an event
+  traffic    post new clone and view counts (needs Administration: read)
   setup      create the inbox pull request (idempotent)
   send       fire an event at the relay from anywhere (repository_dispatch)
   post       post an event straight to the inbox (needs a token that can comment)
@@ -65,6 +67,16 @@ def cmd_digest(args) -> int:
 def cmd_relay(args) -> int:
     from .relay import main_relay
     return main_relay(config_path=args.config)
+
+
+def cmd_activity(args) -> int:
+    from .activity import main_activity
+    return main_activity()
+
+
+def cmd_traffic(args) -> int:
+    from .activity import main_traffic
+    return main_traffic(args.state)
 
 
 def cmd_setup(args) -> int:
@@ -147,6 +159,12 @@ def main(argv=None) -> int:
     p = sub.add_parser("relay")
     p.add_argument("--config", default="inbox.yml")
     p.set_defaults(fn=cmd_relay)
+
+    sub.add_parser("activity").set_defaults(fn=cmd_activity)
+
+    p = sub.add_parser("traffic")
+    p.add_argument("--state", default=".state/traffic.json")
+    p.set_defaults(fn=cmd_traffic)
 
     sub.add_parser("setup").set_defaults(fn=cmd_setup)
 

@@ -2,8 +2,10 @@
 # Keep watcher state on its own branch, so state updates never touch your
 # main branch and never wake the inbox pull request.
 #
-#   scripts/state.sh load   copy watchers.json from the state branch to $STATE_DIR
-#   scripts/state.sh save   commit $STATE_DIR/watchers.json back if it changed
+#   scripts/state.sh load   copy $STATE_FILE from the state branch to $STATE_DIR
+#   scripts/state.sh save   commit $STATE_DIR/$STATE_FILE back if it changed
+#
+# Defaults: STATE_BRANCH=agent-inbox-state, STATE_FILE=watchers.json.
 #
 # The branch holds a single commit that is replaced on each save, so it never
 # grows. Runs are serialised by the workflow's concurrency group.
@@ -11,7 +13,7 @@ set -euo pipefail
 
 BRANCH="${STATE_BRANCH:-agent-inbox-state}"
 DIR="${STATE_DIR:-.state}"
-FILE="watchers.json"
+FILE="${STATE_FILE:-watchers.json}"
 REMOTE="${STATE_REMOTE:-origin}"
 
 case "${1:-}" in

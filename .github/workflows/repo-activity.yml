@@ -1,0 +1,99 @@
+# Repo activity: post an inbox event when someone stars or forks this
+# repository, or opens an issue, pull request or discussion, or comments on
+# one. GitHub starts these runs the moment it happens, so there's no polling.
+# Your own activity, bots and the inbox pull request itself are skipped.
+#
+# This repository watches itself, so it's on here for vexxxing/agent-inbox
+# only. In your copy, set the repository variable REPO_ACTIVITY_ENABLED to
+# true to turn it on (Settings > Secrets and variables > Actions > Variables).
+#
+# Clone and visitor counts come from the traffic API, which the default
+# GITHUB_TOKEN can't read. To get them, add a fine-grained token with
+# Administration: Read-only on this repository as the TRAFFIC_TOKEN secret,
+# and set the variable TRAFFIC_ENABLED to true. They're checked every hour.
+name: Repo activity
+
+on:
+  watch:
+    types: [started]
+  fork:
+  issues:
+    types: [opened]
+  issue_comment:
+    types: [created]
+  # _target, so pull requests from forks can still post to the inbox. The job
+  # checks out this repository's default branch, never the pull request's code.
+  pull_request_target:
+    types: [opened]
+  discussion:
+    types: [created]
+  discussion_comment:
+    types: [created]
+  schedule:
+    - cron: "17 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  activity:
+    if: >-
+      github.event_name != 'schedule' &&
+      (vars.REPO_ACTIVITY_ENABLED == 'true' || github.repository == 'vexxxing/agent-inbox')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Post event to the inbox
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
+          INBOX_PR: ${{ vars.INBOX_PR }}
+        run: python -m agent_inbox activity
+
+  traffic:
+    if: >-
+      (github.event_name == 'workflow_dispatch' ||
+       (github.event_name == 'schedule' && vars.TRAFFIC_ENABLED == 'true')) &&
+      (vars.REPO_ACTIVITY_ENABLED == 'true' || github.repository == 'vexxxing/agent-inbox')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    concurrency:
+      group: agent-inbox-traffic
+      cancel-in-progress: false
+    permissions:
+      contents: write    # save counts on the agent-inbox-traffic branch
+      issues: write
+      pull-requests: write
+    env:
+      STATE_BRANCH: agent-inbox-traffic
+      STATE_FILE: traffic.json
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - run: python -m pip install -r requirements.txt
+      - name: Load state
+        run: bash scripts/state.sh load
+      - name: Check clone and view counts
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INBOX_TOKEN: ${{ secrets.INBOX_TOKEN }}
+          TRAFFIC_TOKEN: ${{ secrets.TRAFFIC_TOKEN }}
+          INBOX_PR: ${{ vars.INBOX_PR }}
+        run: python -m agent_inbox traffic --state .state/traffic.json
+      - name: Save state
+        if: always()
+        run: bash scripts/state.sh save

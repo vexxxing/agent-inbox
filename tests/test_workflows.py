@@ -25,7 +25,8 @@ def load(name):
 class WorkflowTests(unittest.TestCase):
     def test_all_parse_and_have_jobs(self):
         files = sorted(p.name for p in WORKFLOWS.glob("*.yml"))
-        self.assertEqual(files, ["relay.yml", "setup.yml", "tests.yml", "watchers.yml"])
+        self.assertEqual(files, ["relay.yml", "repo-activity.yml", "setup.yml", "tests.yml",
+                                 "watchers.yml"])
         for name in files:
             with self.subTest(name=name):
                 wf = load(name)
@@ -67,6 +68,28 @@ class WorkflowTests(unittest.TestCase):
         self.assertTrue(any("state.sh load" in s for s in steps))
         save = wf["jobs"]["watch"]["steps"][-1]
         self.assertEqual((save["if"], save["run"]), ("always()", "bash scripts/state.sh save"))
+
+    def test_repo_activity(self):
+        wf = load("repo-activity.yml")
+        for name in ("watch", "fork", "issues", "issue_comment", "pull_request_target",
+                     "discussion", "discussion_comment", "schedule", "workflow_dispatch"):
+            self.assertIn(name, wf["on"])
+        self.assertNotIn("pull_request", wf["on"], "pull_request_target only")
+        self.assertNotIn("concurrency", wf, "a burst of stars must not cancel runs")
+        self.assertEqual(wf["permissions"]["contents"], "read")
+        for job in wf["jobs"].values():
+            self.assertIn("vars.REPO_ACTIVITY_ENABLED == 'true'", job["if"],
+                          "off in a copy until turned on")
+        activity = wf["jobs"]["activity"]
+        checkout = activity["steps"][0]
+        self.assertEqual(checkout["uses"], "actions/checkout@v4")
+        self.assertNotIn("ref", checkout.get("with", {}),
+                         "never check out a pull request's code under _target")
+        self.assertIs(checkout["with"]["persist-credentials"], False)
+        traffic = wf["jobs"]["traffic"]
+        self.assertIn("vars.TRAFFIC_ENABLED == 'true'", traffic["if"])
+        self.assertEqual(traffic["env"]["STATE_BRANCH"], "agent-inbox-traffic",
+                         "own branch, so it never overwrites watcher state")
 
     def test_tests_skip_the_inbox_pr(self):
         wf = load("tests.yml")
