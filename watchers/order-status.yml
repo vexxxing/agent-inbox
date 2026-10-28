@@ -1,0 +1,23 @@
+# Follow an order: hear about each status change, and once when it arrives.
+# Point it at a tracking page that returns JSON (many shops and carriers have
+# one; if yours needs a key, see README > API keys), then set enabled: true.
+name: order-status
+description: Keep me posted on my order
+enabled: false
+every: 1h
+notify: milestones        # each status change: shipped, out for delivery...
+fetch:
+  url: https://shop.example.com/api/orders/1234
+extract:
+  json: tracking.status
+condition:
+  equals: delivered
+event:
+  type: order.delivered
+  message: Your order was delivered
+# To check more often as the delivery nears, swap notify: milestones for:
+# notify: live
+# live:
+#   at_json: tracking.eta  # the expected time on the page (RFC 3339 or Unix seconds)
+#   window: 2h             # speed up from 2 hours before to 2 hours after it
+#   every: 5m              # as often as the Watchers schedule allows

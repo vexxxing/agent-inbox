@@ -1,6 +1,7 @@
 """Command line: python -m agent_inbox <command>
 
-  watch      check due watchers and post hits to the inbox
+  watch      check due watchers and post hits to the inbox (and the daily digest)
+  digest     post the digest of every watcher now
   relay      turn the current Actions trigger into an inbox event
   setup      create the inbox pull request (idempotent)
   send       fire an event at the relay from anywhere (repository_dispatch)
@@ -32,14 +33,32 @@ def _post_fn(args):
 
 
 def cmd_watch(args) -> int:
-    from . import watch
+    from . import digest, watch
     watchers = watch.load_watchers(Path(args.dir))
+    config = digest.load_config(args.config)
     state = watch.load_state(Path(args.state))
-    summary = watch.run(watchers, state, _post_fn(args), allow_file=args.allow_file,
+    post = _post_fn(args)
+    summary = watch.run(watchers, state, post, allow_file=args.allow_file,
                         force=args.force, only=args.only)
+    if not args.only and not args.no_digest:
+        try:
+            summary["digest"] = bool(digest.run(watchers, state, post, config))
+        except Exception as exc:  # noqa: BLE001 - the watcher results still get saved
+            summary["errors"] += 1
+            print(f"[digest] could not post, will retry next run: {exc}")
     if not args.dry_run or args.save_state:
         watch.save_state(Path(args.state), state)
     print(json.dumps(summary))
+    return 0
+
+
+def cmd_digest(args) -> int:
+    from . import digest, watch
+    watchers = watch.load_watchers(Path(args.dir))
+    state = watch.load_state(Path(args.state))
+    digest.run(watchers, state, _post_fn(args), digest.load_config(args.config), force=True)
+    if not args.dry_run or args.save_state:
+        watch.save_state(Path(args.state), state)
     return 0
 
 
@@ -91,9 +110,10 @@ def cmd_parse(args) -> int:
 
 
 def cmd_check(args) -> int:
-    from . import relay, watch
+    from . import digest, relay, watch
     watchers = watch.load_watchers(Path(args.dir))
     relay.load_config(args.config)
+    digest.load_config(args.config)
     enabled = sum(1 for w in watchers if w.get("enabled", True))
     print(f"ok: {len(watchers)} watchers ({enabled} enabled), inbox.yml valid")
     return 0
@@ -111,8 +131,18 @@ def main(argv=None) -> int:
     p.add_argument("--save-state", action="store_true", help="save state even on a dry run")
     p.add_argument("--allow-file", action="store_true", help="allow file: URLs (local tests)")
     p.add_argument("--force", action="store_true", help="ignore each watcher's 'every'")
-    p.add_argument("--only", help="run one watcher by name")
+    p.add_argument("--only", help="run one watcher by name (skips the digest)")
+    p.add_argument("--config", default="inbox.yml", help="for the digest settings")
+    p.add_argument("--no-digest", action="store_true", help="don't post the daily digest")
     p.set_defaults(fn=cmd_watch)
+
+    p = sub.add_parser("digest")
+    p.add_argument("--dir", default="watchers")
+    p.add_argument("--state", default=".state/watchers.json")
+    p.add_argument("--config", default="inbox.yml")
+    p.add_argument("--dry-run", action="store_true", help="print the digest, post nothing")
+    p.add_argument("--save-state", action="store_true", help="save state even on a dry run")
+    p.set_defaults(fn=cmd_digest)
 
     p = sub.add_parser("relay")
     p.add_argument("--config", default="inbox.yml")

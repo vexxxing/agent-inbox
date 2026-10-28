@@ -4,6 +4,7 @@ name: showtimes
 description: Tell me when tickets for the film go on sale
 enabled: false
 every: 30m
+notify: quiet             # each new showtime is posted as soon as it is seen
 fetch:
   url: https://cinema.example.com/films/the-film
 extract:

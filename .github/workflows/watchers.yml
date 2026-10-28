@@ -20,6 +20,10 @@ on:
       only:
         description: Run only this watcher (name)
         required: false
+      digest:
+        description: Also post the daily digest now
+        type: boolean
+        default: false
 
 concurrency:
   group: agent-inbox-watchers
@@ -51,11 +55,15 @@ jobs:
           INBOX_PR: ${{ vars.INBOX_PR }}
           FORCE: ${{ inputs.force }}
           ONLY: ${{ inputs.only }}
+          DIGEST: ${{ inputs.digest }}
         run: |
           args=()
           if [ "${FORCE:-}" = "true" ]; then args+=(--force); fi
           if [ -n "${ONLY:-}" ]; then args+=(--only "$ONLY"); fi
           python -m agent_inbox watch --state .state/watchers.json "${args[@]}"
+          if [ "${DIGEST:-}" = "true" ]; then
+            python -m agent_inbox digest --state .state/watchers.json
+          fi
       - name: Save state
         if: always()
         run: bash scripts/state.sh save

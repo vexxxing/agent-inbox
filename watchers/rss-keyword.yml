@@ -4,6 +4,7 @@ name: rss-keyword
 description: New posts that mention the keyword
 enabled: false
 every: 30m
+notify: digest            # matches wait for the daily digest (see inbox.yml)
 fetch:
   url: https://news.example.com/feed.xml
 extract:

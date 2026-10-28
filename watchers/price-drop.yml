@@ -3,6 +3,7 @@ name: price-drop
 description: Tell me when the price is under 20
 enabled: false
 every: 1h
+notify: quiet             # only the drop itself, not every price change
 fetch:
   url: https://shop.example.com/products/example-item
 extract:

@@ -17,7 +17,7 @@ import urllib.request
 from pathlib import Path
 
 from . import event as ev
-from .extract import ExtractError, Item, extract, parse_number
+from .extract import ExtractError, Item, extract, parse_number, parse_path
 
 MAX_BYTES = 2 * 1024 * 1024
 DEFAULT_EVERY = "30m"
@@ -27,6 +27,14 @@ DEFAULT_MAX_SEEN = 500
 # that suddenly lists 200 items should not post 200 comments in one run.
 DEFAULT_MAX_EVENTS = 20
 USER_AGENT = "agent-inbox-watcher/1"
+# How a watcher's news reaches the inbox (see README > Watchers > Updates).
+NOTIFY_LEVELS = ("quiet", "milestones", "digest", "live")
+DEFAULT_NOTIFY = "quiet"
+DEFAULT_LIVE_WINDOW = "2h"
+DEFAULT_LIVE_EVERY = "5m"
+# Events a digest watcher holds for the daily digest; older ones are counted
+# and dropped beyond this.
+MAX_HELD = 50
 
 _CONDITION_KEYS = {"exists", "contains", "not_contains", "matches", "below",
                    "above", "at_most", "at_least", "equals", "not_equals", "changed"}
@@ -38,7 +46,9 @@ _NUMBER_CONDITIONS = ("below", "above", "at_most", "at_least")
 # workflow itself holds: a watcher URL is a third-party server.
 _SECRET_ENV_RE = re.compile(r"^(GITHUB_|ACTIONS_|RUNNER_|INBOX_)")
 _TOP_KEYS = {"name", "enabled", "every", "fetch", "extract", "condition", "event",
-             "fire", "prime", "notify_errors_after", "description", "max_seen", "max_events"}
+             "fire", "prime", "notify_errors_after", "description", "max_seen", "max_events",
+             "notify", "live"}
+_LIVE_KEYS = {"at", "at_json", "window", "every"}
 
 
 class WatcherError(ValueError):
@@ -53,6 +63,31 @@ def parse_duration(text) -> int:
     if not match:
         raise WatcherError(f"bad duration {text!r}: use e.g. 30m, 2h, 1d")
     return int(match.group(1)) * {"s": 1, "m": 60, "h": 3600, "d": 86400}[match.group(2)]
+
+
+def parse_time(value) -> _dt.datetime | None:
+    """An RFC 3339 time with a zone ('2026-11-02T18:00:00Z') or Unix seconds
+    -> aware datetime. None if it isn't one; a time without a zone is
+    refused, because guessing the zone would move it by hours."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        try:
+            return _dt.datetime.fromtimestamp(value, _dt.timezone.utc)
+        except (OverflowError, OSError, ValueError):
+            return None
+    if isinstance(value, _dt.datetime):
+        return value if value.tzinfo else None
+    try:
+        parsed = _dt.datetime.fromisoformat(str(value).strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo else None
+
+
+def _reads_page(live: dict) -> bool:
+    """True when live's expected time comes from each fetch, not the file."""
+    return "at_json" in live or live.get("at") == "value"
 
 
 def load_watchers(directory: Path) -> list[dict]:
@@ -134,6 +169,33 @@ def check_watcher(spec: dict, where: str = "watcher") -> None:
                             or spec[key] < (0 if key == "notify_errors_after" else 1)):
             fail(f"{key} must be a whole number")
     parse_duration(spec.get("every", DEFAULT_EVERY))
+    notify = spec.get("notify", DEFAULT_NOTIFY)
+    if notify not in NOTIFY_LEVELS:
+        fail("notify must be quiet, milestones, digest or live")
+    live = spec.get("live")
+    if notify != "live":
+        if live is not None:
+            fail("live only applies with notify: live")
+        return
+    if not isinstance(live, dict) or ("at" in live) == ("at_json" in live):
+        fail("notify: live needs one of live.at (a time like 2026-11-02T18:00:00Z, "
+             "or value) and live.at_json (a JSON path to the time on the page)")
+    if set(live) - _LIVE_KEYS:
+        fail(f"unknown live keys {sorted(set(live) - _LIVE_KEYS)}")
+    is_list = "rss" in extract_spec or extract_spec.get("all")
+    if _reads_page(live):
+        if is_list:
+            fail("live.at: value and live.at_json only work for single-value "
+                 "watchers; give a fixed live.at")
+    elif parse_time(live["at"]) is None:
+        fail("live.at must be a time with a zone (2026-11-02T18:00:00Z) or value")
+    if "at_json" in live:
+        try:
+            parse_path(str(live["at_json"]))
+        except ExtractError as exc:
+            fail(f"live.at_json: {exc}")
+    parse_duration(live.get("window", DEFAULT_LIVE_WINDOW))
+    parse_duration(live.get("every", DEFAULT_LIVE_EVERY))
 
 
 # -- state ---------------------------------------------------------------------
@@ -250,6 +312,46 @@ def _equal(value, text: str, want) -> bool:
     return a is not None and b is not None and a == b
 
 
+# -- update levels -------------------------------------------------------------
+
+def _note_live(spec: dict, wstate: dict, item: Item | None, text: str) -> None:
+    """For notify: live with a time read from the page, remember the expected
+    time this fetch gave, so the next run knows whether it is near."""
+    live = spec.get("live") or {}
+    if spec.get("notify") != "live" or not _reads_page(live):
+        return
+    if "at_json" in live:
+        try:
+            found = extract({"json": str(live["at_json"])}, text)
+        except ExtractError:
+            found = []
+        value = found[0].value if found else None
+    else:
+        value = None if item is None else item.value
+    when = parse_time(value)
+    if when is None:
+        wstate.pop("live_at", None)
+    else:
+        wstate["live_at"] = when.astimezone(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def effective_every(spec: dict, wstate: dict, now: _dt.datetime) -> int:
+    """The watcher's interval, shortened to live.every while the expected time
+    (live.at) is within live.window either side of now."""
+    every = parse_duration(spec.get("every", DEFAULT_EVERY))
+    if spec.get("notify") != "live":
+        return every
+    live = spec["live"]
+    at = wstate.get("live_at") if _reads_page(live) else live["at"]
+    when = parse_time(at) if at else None
+    if when is None:
+        return every
+    window = parse_duration(live.get("window", DEFAULT_LIVE_WINDOW))
+    if abs((when - now).total_seconds()) <= window:
+        return min(every, parse_duration(live.get("every", DEFAULT_LIVE_EVERY)))
+    return every
+
+
 # -- the runner ----------------------------------------------------------------
 
 def _is_due(wstate: dict, every: int, now: _dt.datetime) -> bool:
@@ -329,6 +431,7 @@ def check_one(spec: dict, wstate: dict, text: str, now_iso: str) -> list[dict]:
         # fire the same hit again once the page is back.
         raise ExtractError("nothing on the page matched the extractor")
     value_key = None if item is None else _h(_as_text(item.value))
+    _note_live(spec, wstate, item, text)
     if condition.get("changed"):
         previous = wstate.get("last_value")
         seen_before = "last_value" in wstate
@@ -353,6 +456,18 @@ def check_one(spec: dict, wstate: dict, text: str, now_iso: str) -> list[dict]:
             etype, source, _payload(spec, item),
             id=ev.stable_id(f"w-{name}", "edge", fires, value_key), time=now_iso))
     wstate["armed"] = not holds
+    if spec.get("notify") in ("milestones", "live"):
+        # Every change of the watched value is a step worth hearing about,
+        # unless this check already fired the watcher's own event.
+        had = "last_seen" in wstate
+        previous = wstate.get("last_seen")
+        wstate["last_seen"] = value_key
+        if had and value_key != previous and not events:
+            steps = int(wstate.get("milestones", 0)) + 1
+            wstate["milestones"] = steps
+            events.append(ev.make_event(
+                "watcher.milestone", source, _payload(spec, item, {"event_type": etype}),
+                id=ev.stable_id(f"w-{name}", "milestone", steps, value_key), time=now_iso))
     return events
 
 
@@ -363,7 +478,7 @@ def run(watchers: list[dict], state: dict, post, *, now: _dt.datetime | None = N
     that watcher's state is left unchanged so the hit is retried next run."""
     now = now or _dt.datetime.now(_dt.timezone.utc)
     now_iso = now.replace(microsecond=0).strftime("%Y-%m-%dT%H:%M:%SZ")
-    summary = {"checked": 0, "skipped": 0, "events": 0, "errors": 0}
+    summary = {"checked": 0, "skipped": 0, "events": 0, "held": 0, "errors": 0}
     if only and only not in {w["name"] for w in watchers}:
         raise WatcherError(f"no watcher named {only!r}")
     for spec in watchers:
@@ -374,7 +489,7 @@ def run(watchers: list[dict], state: dict, post, *, now: _dt.datetime | None = N
             summary["skipped"] += 1
             continue
         wstate = state["watchers"].setdefault(name, {})
-        if not force and not _is_due(wstate, parse_duration(spec.get("every", DEFAULT_EVERY)), now):
+        if not force and not _is_due(wstate, effective_every(spec, wstate, now), now):
             summary["skipped"] += 1
             continue
         summary["checked"] += 1
@@ -399,6 +514,18 @@ def run(watchers: list[dict], state: dict, post, *, now: _dt.datetime | None = N
                 except Exception as post_exc:  # noqa: BLE001
                     log(f"[{name}] could not post error event: {post_exc}")
             continue
+        if spec.get("notify") == "digest":
+            # Held for the daily digest instead of posted one by one.
+            held = trial.get("held", []) + events
+            if len(held) > MAX_HELD:
+                trial["held_dropped"] = int(trial.get("held_dropped", 0)) + len(held) - MAX_HELD
+                held = held[-MAX_HELD:]
+            if held:
+                trial["held"] = held
+            summary["held"] += len(events)
+            for event in events:
+                log(f"[{name}] held for digest: {event['type']} {event['id']}")
+            events = []
         try:
             for event in events:
                 post(event)
@@ -408,11 +535,12 @@ def run(watchers: list[dict], state: dict, post, *, now: _dt.datetime | None = N
             summary["errors"] += 1
             log(f"[{name}] could not post, will retry next run: {exc}")
             continue
+        trial["posted"] = int(trial.get("posted", 0)) + len(events)
         trial["last_run"] = now_iso
         trial["errors"] = 0
         trial.pop("last_error", None)
         state["watchers"][name] = trial
-        if not events:
+        if not events and not trial.get("held"):
             log(f"[{name}] no hit")
     # Forget state for watchers that no longer exist.
     names = {w["name"] for w in watchers}

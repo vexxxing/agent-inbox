@@ -80,6 +80,12 @@ class EndToEndTests(unittest.TestCase):
         spec.update(enabled=True)
         spec["fetch"]["url"] = fixture_url("price_low.html")
         spec_path.write_text(yaml.safe_dump(spec))
+        # And the daily digest, due at once; the second run must remember
+        # (through the state branch) that today's digest already went out.
+        config_path = self.repo / "inbox.yml"
+        config = yaml.safe_load(config_path.read_text())
+        config["digest"] = {"enabled": True, "at": "00:00"}
+        config_path.write_text(yaml.safe_dump(config))
         for _ in range(2):
             self.sh("bash", "scripts/state.sh", "load")
             self.sh(sys.executable, "-m", "agent_inbox", "watch", "--state",
@@ -88,8 +94,11 @@ class EndToEndTests(unittest.TestCase):
             shutil.rmtree(self.repo / ".state")  # a fresh runner has no local state
 
         types = [e["type"] for e in self.events(number)]
-        self.assertEqual(types, ["test.ping", "order.shipped", "price.below"],
-                         "one ping, one order despite the retry, one price hit across two runs")
+        self.assertEqual(types, ["test.ping", "order.shipped", "price.below", "inbox.digest"],
+                         "one ping, one order despite the retry, one price hit and one "
+                         "digest across two runs")
+        digest = self.events(number)[-1]["payload"]
+        self.assertEqual(digest["summary"], "1 watch, 1 new")
         self.assertTrue(all(e is not None for e in self.events(number)))
 
 

@@ -81,7 +81,7 @@ python -m agent_inbox send --type order.shipped --source shop --payload '{"order
 
 ## Watchers
 
-A watcher is one YAML file in `watchers/`. Four examples ship, all turned off:
+A watcher is one YAML file in `watchers/`. Five examples ship, all turned off:
 
 | File | What it does |
 |---|---|
@@ -89,6 +89,7 @@ A watcher is one YAML file in `watchers/`. Four examples ship, all turned off:
 | `price-drop.yml` | Fires when a price goes under a threshold; fires again only after it goes back up |
 | `rss-keyword.yml` | Fires once for each new feed item whose title mentions a keyword |
 | `weather-alert.yml` | Fires when tomorrow's rain chance is 70% or more (free Open-Meteo API) |
+| `order-status.yml` | Posts each status change of an order, then once when it's delivered |
 
 A watcher, annotated:
 
@@ -96,6 +97,7 @@ A watcher, annotated:
 name: price-drop            # defaults to the file name
 enabled: true
 every: 1h                   # at most this often (s, m, h, d)
+notify: quiet               # how much you hear: quiet, milestones, digest, live
 fetch:
   url: https://shop.example.com/products/example-item
   headers:                  # optional; ${NAME} reads an environment variable
@@ -132,6 +134,30 @@ event:
 - *Lists* (`all: true`, and every `rss` watcher): fires once for each new item that passes the condition. On the very first check, items already there are remembered, not reported; set `prime: false` to report them too. At most 20 items fire per check (`max_events`); the rest wait for the next check, which keeps a sudden flood under GitHub's limit on new comments.
 - *Nothing matched*: if the extractor finds nothing (the page changed, or the site served an error or "access denied" page), that check counts as an error and the watcher's memory is left alone, so a blocked page can't make the same hit fire twice. The exception is a condition that uses `exists`, where "nothing there" is the answer.
 - *Errors*: if a watcher fails 3 checks in a row, one `watcher.error` event is posted (change with `notify_errors_after`, `0` to turn off). It resets after a good check.
+
+**How much you hear.** Silence is good when nothing is happening, but days of it look like breakage. Each watcher picks its own level with `notify`:
+
+| `notify` | You hear | Good for |
+|---|---|---|
+| `quiet` (default) | Only the hit itself | A price drop, a refund landing |
+| `milestones` | Each change of the watched value as a `watcher.milestone` event, then the hit | An order going shipped, out for delivery, delivered |
+| `digest` | Nothing at once; hits wait for one daily `inbox.digest` event | Feed mentions, anything that can wait for the morning |
+| `live` | Milestones, checked more often as an expected time nears | A delivery or pickup with an ETA |
+
+For `live`, say when the thing is expected and how close counts as near:
+
+```yaml
+notify: live
+live:
+  at_json: tracking.eta     # the time on the page (RFC 3339 or Unix seconds),
+                            # or at: 2026-11-02T18:00:00Z, or at: value
+  window: 2h                # from 2 hours before to 2 hours after (default)
+  every: 5m                 # how often to check inside the window (default)
+```
+
+A watcher can't check more often than the Watchers schedule runs, so on the default 30-minute schedule `live` only helps once you shorten the schedule (see [Limits](#limits)). For list watchers (`all: true` and RSS), each new item is already its own event, so `milestones` and `live` behave like `quiet`. `watcher.error` events always post at once, whatever the level.
+
+**The daily digest** is one event that sums up every enabled watcher: when it last checked, what it posted, what it held back, and whether it's failing. It's set in the `digest` section of `inbox.yml`. With `enabled: auto` (the default) it goes out only when some watcher uses `notify: digest`; set `enabled: true` to get it every day as a sign everything is alive. It's posted by the first scheduled watchers run at or after `at` (UTC), so it costs no extra Actions minutes, and **Actions → Watchers → Run workflow** with **digest** ticked posts one right away.
 
 **State** lives in `watchers.json` on a separate branch, `agent-inbox-state`, which the workflow creates. It holds one commit that's replaced each run, so it never grows, and it never touches your main branch or wakes the inbox. Delete the branch to reset every watcher.
 

@@ -82,7 +82,9 @@ class ExampleWatcherTests(unittest.TestCase):
         self.assertNotEqual(first[0]["id"], second[0]["id"])
 
     def test_rss_primes_then_fires_for_new_matches(self):
-        h = Harness(example("rss-keyword", "feed.xml"))
+        spec = example("rss-keyword", "feed.xml")
+        spec["notify"] = "quiet"  # the example holds matches for the digest
+        h = Harness(spec)
         self.assertEqual(h.run(), [], "items already in the feed are not news")
         h.point("rss-keyword", "feed_new.xml")
         events = h.run()
@@ -108,7 +110,8 @@ class ExampleWatcherTests(unittest.TestCase):
     def test_examples_ship_disabled_and_valid(self):
         watchers = watch.load_watchers(ROOT / "watchers")
         self.assertEqual({w["name"] for w in watchers},
-                         {"showtimes", "price-drop", "rss-keyword", "weather-alert"})
+                         {"showtimes", "price-drop", "rss-keyword", "weather-alert",
+                          "order-status"})
         self.assertTrue(all(w["enabled"] is False for w in watchers))
         state = {"version": 1, "watchers": {}}
         summary = watch.run(watchers, state, self.fail, log=lambda *_: None)
@@ -253,7 +256,7 @@ class CommandLineTests(unittest.TestCase):
     def test_check_command_on_the_repo(self):
         out = subprocess.run([sys.executable, "-m", "agent_inbox", "check"], cwd=ROOT,
                              capture_output=True, text=True, check=True).stdout
-        self.assertIn("4 watchers (0 enabled)", out)
+        self.assertIn("5 watchers (0 enabled)", out)
 
 
 if __name__ == "__main__":
