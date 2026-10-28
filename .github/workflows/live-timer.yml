@@ -1,0 +1,38 @@
+# Live test 1: wait, then post one event to the inbox as github-actions[bot].
+# Runs on a push to the live-test branch that touches .live/timer, so its
+# check runs land on that branch, not on the inbox pull request.
+name: Live test timer
+
+on:
+  push:
+    branches: [live-test]
+    paths: [".live/timer"]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+jobs:
+  timer:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install -r requirements.txt
+      - name: Wait
+        run: sleep 75
+      - name: Post the event
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INBOX_PR: "1"
+        run: |
+          now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+          python -m agent_inbox post --type test.timer --source live-test \
+            --payload "{\"waited_seconds\": 75, \"posted_at\": \"$now\", \"run\": \"$GITHUB_RUN_ID\"}"
+          echo "posted at $now"
