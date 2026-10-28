@@ -56,7 +56,7 @@ agent-inbox makes it easy to build listeners. Agent platforms, GitHub and the si
 - **Documented.** In auto mode, the classifier trusts only the working repository and its remotes. A repository being private doesn't make it fine to store personal data there. [Auto mode](https://code.claude.com/docs/en/auto-mode-config)
 - **Documented.** Cloud sessions reach only allowlisted domains by default, and their GitHub access is limited to repositories attached to the session. [Cloud environments](https://code.claude.com/docs/en/cloud-environments.md)
 - **Inferred.** Watchers run in GitHub Actions, not inside the agent, so the agent's network allowlist doesn't stop a watcher. It only stops the agent from trying the watched site itself.
-- **Observed.** A cloud session subscribed to the inbox pull request was woken by comments from `github-actions[bot]`, 2 to 3 seconds after each comment.
+- **Observed.** A cloud session subscribed to the inbox pull request was woken by comments from `github-actions[bot]`, 2 to 3 seconds after each comment, in a private repository and again in this public one ([pull request #1](https://github.com/vexxxing/agent-inbox/pull/1)).
 
 ## Seen in the wild
 
@@ -66,3 +66,4 @@ We'd rather collect real cases than guess. If a listener is refused in normal us
 |---|---|---|---|---|
 | 2026-10-27 | Claude Code (cloud) | A very famous person's social media posts and likes, with the agent pushing setup to the user's private repo | The whole brief, before any work started | None |
 | 2026-10-27 | Claude Code (cloud) | A timer, then Hacker News's newest stories | Nothing: both ran and woke the agent | |
+| 2026-10-28 | Claude Code (cloud) | The same two tests in this public repository | Nothing: both ran and woke the agent | |

@@ -189,9 +189,22 @@ The inbox is just a pull request, so anything that can read pull request comment
 
 > **showtimes.available**: Tell me the film, the times, and the cinema link. Don't buy tickets.
 
+## Tested live
+
+On 2026-10-28 this repository ran two live tests against its own inbox, [pull request #1](https://github.com/vexxxing/agent-inbox/pull/1), with a Claude Code cloud session subscribed to it. Each wake was recorded by the agent replying on that pull request.
+
+| Test | Event happened | Event comment posted | Agent woke | Comment to wake |
+|---|---|---|---|---|
+| Timer: workflow waits 75 s, then posts `test.timer` | 16:37:23Z | 16:37:24Z | 16:37:27Z | ~3 s |
+| Hacker News: poll the public newest-stories list every 25 s, post `hn.new_story` | 16:37:57Z (story created) | 16:38:42Z | 16:38:45Z | ~3 s (48 s from story) |
+
+Both events were posted by `github-actions[bot]` with the default `GITHUB_TOKEN`, so no extra token was needed for the wake. Most of the Hacker News time is the poll interval; a webhook sender skips that wait. Actions time: timer run 86 s, Hacker News run 61 s, test suite 26 s.
+
+To repeat both tests in your own copy, see [docs/live-test.md](docs/live-test.md).
+
 ## Limits
 
-- **Scheduled runs are late.** GitHub's shortest schedule is every 5 minutes, and scheduled runs often start several minutes late, more at busy times. Watchers are for "within the hour", not "within the minute". Webhooks are much faster. In a live test, a triggered job was running and posting within about 10 seconds, and a Claude session watching the inbox woke 2 to 3 seconds after the comment landed.
+- **Scheduled runs are late.** GitHub's shortest schedule is every 5 minutes, and scheduled runs often start several minutes late, more at busy times. Watchers are for "within the hour", not "within the minute". Webhooks are much faster. In live tests a Claude session watching the inbox woke about 3 seconds after each event comment (see [Tested live](#tested-live)).
 - **Actions minutes on private repos.** GitHub bills every job as at least one minute. A scheduled run on a private repository therefore costs about:
 
   | Schedule | Minutes per month |
