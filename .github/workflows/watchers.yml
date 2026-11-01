@@ -2,7 +2,8 @@
 #
 # Off until you set the repository variable WATCHERS_ENABLED to true
 # (Settings > Secrets and variables > Actions > Variables). A skipped job
-# uses no Actions minutes.
+# uses no Actions minutes. This repository runs its own watchers, so it's on
+# here for vexxxing/agent-inbox without the variable.
 name: Watchers
 
 on:
@@ -36,7 +37,7 @@ permissions:
 
 jobs:
   watch:
-    if: vars.WATCHERS_ENABLED == 'true'
+    if: vars.WATCHERS_ENABLED == 'true' || github.repository == 'vexxxing/agent-inbox'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:

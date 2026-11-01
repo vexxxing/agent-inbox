@@ -39,7 +39,7 @@ MAX_HELD = 50
 _CONDITION_KEYS = {"exists", "contains", "not_contains", "matches", "below",
                    "above", "at_most", "at_least", "equals", "not_equals", "changed"}
 _EXTRACT_KEYS = {"css", "json", "rss", "regex", "attr", "all", "number", "field",
-                 "group", "ignore_case"}
+                 "group", "ignore_case", "missing"}
 _FETCH_KEYS = {"url", "headers", "timeout"}
 _NUMBER_CONDITIONS = ("below", "above", "at_most", "at_least")
 # Header values may read environment variables, but never the tokens the
@@ -143,6 +143,8 @@ def check_watcher(spec: dict, where: str = "watcher") -> None:
         fail(f"unknown extract keys {sorted(set(extract_spec) - _EXTRACT_KEYS)}")
     if sum(k in extract_spec for k in ("css", "json", "rss", "regex")) != 1:
         fail("extract needs exactly one of css, json, rss, regex")
+    if "missing" in extract_spec and "regex" not in extract_spec:
+        fail("extract.missing only applies to regex")
     condition = spec.get("condition", {"exists": True})
     if not isinstance(condition, dict) or not condition:
         fail("condition must be a mapping")

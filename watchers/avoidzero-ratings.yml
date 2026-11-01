@@ -1,0 +1,20 @@
+# AvoidZero: Cash Flow Forecast on Google Play: tell me when the number of
+# ratings changes. Google Play labels this number "reviews"; it counts every
+# star rating, with or without text. Read from the listing's schema.org data,
+# which gives the exact number (the visible label rounds to 1.2K and so on).
+# A listing with no ratings yet has no ratingCount, which reads as "0".
+name: avoidzero-ratings
+description: AvoidZero's Google Play review count changed
+enabled: true
+every: 2h
+notify: quiet
+fetch:
+  url: https://play.google.com/store/apps/details?id=com.dave.runwayclock&hl=en_US&gl=US
+extract:
+  regex: '"@type":"SoftwareApplication"(?:[^<]*?"ratingCount":"(\d+)")?'
+  missing: "0"
+condition:
+  changed: true
+event:
+  type: play.reviews_changed
+  message: AvoidZero's review count on Google Play changed

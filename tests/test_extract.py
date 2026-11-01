@@ -52,6 +52,15 @@ class ExtractTests(unittest.TestCase):
         with self.assertRaises(ExtractError):
             extract({"regex": "("}, text)
 
+    def test_regex_missing_group(self):
+        spec = {"regex": r'"app"(?:[^<]*?"count":"(\d+)")?'}
+        with_count = '<script>{"app", "count":"7"}</script>'
+        without = '<script>{"app", "other":"x"}</script><p>"count":"9"</p>'
+        self.assertEqual(extract(spec, with_count)[0].value, "7")
+        self.assertEqual(extract(spec, without), [], "no value: skipped, not None")
+        self.assertEqual(extract({**spec, "missing": "0"}, without)[0].value, "0")
+        self.assertEqual(extract({**spec, "missing": 0, "number": True}, without)[0].value, 0.0)
+
     def test_exactly_one_kind(self):
         with self.assertRaises(ExtractError):
             extract({"css": "a", "regex": "b"}, "")

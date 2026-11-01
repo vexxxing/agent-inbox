@@ -1,0 +1,18 @@
+# AvoidZero: Cash Flow Forecast on Google Play: tell me when the download
+# tier changes (0+, 1+, 5+, 10+, 50+, 100+, 500+, 1K+ ...). Google only
+# shows the tier, not an exact count. The first check only records it.
+name: avoidzero-downloads
+description: AvoidZero's Google Play download tier changed
+enabled: true
+every: 2h
+notify: quiet
+fetch:
+  url: https://play.google.com/store/apps/details?id=com.dave.runwayclock&hl=en_US&gl=US
+extract:
+  # The "Downloads" stat near the top of the listing: <div>100+</div><div>Downloads</div>
+  regex: '>(\d[\d.,]*[KMB]?\+)</div><div[^>]*>Downloads</div>'
+condition:
+  changed: true
+event:
+  type: play.downloads_changed
+  message: AvoidZero's download tier on Google Play changed

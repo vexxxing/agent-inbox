@@ -1,0 +1,21 @@
+# AvoidZero: Cash Flow Forecast on Google Play: post each written review that
+# shows up on the listing page. The page shows only a few reviews (Google's
+# "most relevant", not always the newest), so a review can appear here late
+# or not at all; avoidzero-ratings still counts every one. If Google renames
+# the page's review class, this one goes quiet while the count keeps working.
+name: avoidzero-reviews
+description: A new written review on AvoidZero's Google Play listing
+enabled: true
+every: 2h
+notify: quiet
+fetch:
+  url: https://play.google.com/store/apps/details?id=com.dave.runwayclock&hl=en_US&gl=US
+extract:
+  css: ".h3YV2d"          # the text of each review shown on the listing
+  all: true
+condition:
+  exists: true
+prime: false              # the app has no reviews yet, so report the first ones too
+event:
+  type: play.new_review
+  message: New review on AvoidZero's Google Play listing

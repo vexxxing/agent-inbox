@@ -61,7 +61,9 @@ class WorkflowTests(unittest.TestCase):
         wf = load("watchers.yml")
         cron = wf["on"]["schedule"][0]["cron"]
         self.assertEqual(len(cron.split()), 5)
-        self.assertEqual(wf["jobs"]["watch"]["if"], "vars.WATCHERS_ENABLED == 'true'",
+        self.assertEqual(wf["jobs"]["watch"]["if"],
+                         "vars.WATCHERS_ENABLED == 'true' || "
+                         "github.repository == 'vexxxing/agent-inbox'",
                          "off by default so a fresh copy spends no minutes")
         self.assertFalse(wf["concurrency"]["cancel-in-progress"])
         steps = [s.get("run", "") for s in wf["jobs"]["watch"]["steps"]]

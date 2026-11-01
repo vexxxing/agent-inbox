@@ -109,10 +109,11 @@ class ExampleWatcherTests(unittest.TestCase):
 
     def test_examples_ship_disabled_and_valid(self):
         watchers = watch.load_watchers(ROOT / "watchers")
-        self.assertEqual({w["name"] for w in watchers},
-                         {"showtimes", "price-drop", "rss-keyword", "weather-alert",
-                          "order-status"})
-        self.assertTrue(all(w["enabled"] is False for w in watchers))
+        examples = {"showtimes", "price-drop", "rss-keyword", "weather-alert", "order-status"}
+        self.assertEqual({w["name"] for w in watchers}, examples | OWN_WATCHERS)
+        self.assertTrue(all(w["enabled"] is False for w in watchers if w["name"] in examples))
+        self.assertTrue(all(w["enabled"] is True for w in watchers if w["name"] in OWN_WATCHERS))
+        watchers = [w for w in watchers if w["name"] in examples]
         state = {"version": 1, "watchers": {}}
         summary = watch.run(watchers, state, self.fail, log=lambda *_: None)
         self.assertEqual(summary["checked"], 0, "disabled watchers make no requests")
@@ -125,6 +126,58 @@ class ExampleWatcherTests(unittest.TestCase):
         watch.run([spec], state, posted.append, allow_file=True, only="price-drop",
                   log=lambda *_: None)
         self.assertEqual(len(posted), 1)
+
+
+# This repository's own watchers (README > Watchers): on here, for the owner.
+OWN_WATCHERS = {"avoidzero-downloads", "avoidzero-ratings", "avoidzero-reviews"}
+
+
+class PlayListingWatcherTests(unittest.TestCase):
+    """The AvoidZero watchers, against trimmed copies of a Google Play listing:
+    one brand new (0+ downloads, no ratings), one later (10+, 3 ratings, two
+    written reviews)."""
+
+    def harness(self, fixture="play_new.html"):
+        return Harness(*(example(name, fixture) for name in sorted(OWN_WATCHERS)))
+
+    def test_first_check_only_records(self):
+        h = self.harness()
+        self.assertEqual(h.run(), [])
+        self.assertEqual(h.last_summary["errors"], 0, "no ratings yet is not an error")
+        self.assertEqual(h.run(), [], "nothing changed")
+
+    def test_new_ratings_downloads_and_reviews_each_fire_once(self):
+        h = self.harness()
+        h.run()
+        for name in OWN_WATCHERS:
+            h.point(name, "play_reviewed.html")
+        events = h.run()
+        by_type = {}
+        for e in events:
+            by_type.setdefault(e["type"], []).append(e["payload"])
+        self.assertEqual([p["value"] for p in by_type["play.downloads_changed"]], ["10+"])
+        self.assertEqual([p["value"] for p in by_type["play.reviews_changed"]], ["3"])
+        self.assertEqual([p["value"] for p in by_type["play.new_review"]],
+                         ["Clear forecast, no account needed.",
+                          "Wish it had CSV export & widgets."])
+        self.assertEqual(h.run(), [], "same counts and reviews never fire twice")
+
+    def test_all_read_the_same_listing(self):
+        urls = {yaml.safe_load((ROOT / "watchers" / f"{n}.yml").read_text())["fetch"]["url"]
+                for n in OWN_WATCHERS}
+        self.assertEqual(urls, {"https://play.google.com/store/apps/details"
+                                "?id=com.dave.runwayclock&hl=en_US&gl=US"})
+
+    def test_blocked_page_is_an_error_not_a_change(self):
+        h = self.harness("play_reviewed.html")
+        h.run()
+        for name in OWN_WATCHERS:
+            h.point(name, "price_high.html")  # not a Play listing at all
+        self.assertEqual(h.run(), [])
+        self.assertEqual(h.last_summary["errors"], 2, "downloads and ratings report it")
+        for name in OWN_WATCHERS:
+            h.point(name, "play_reviewed.html")
+        self.assertEqual(h.run(), [], "back to normal: nothing fires again")
 
 
 class RunnerTests(unittest.TestCase):
@@ -225,6 +278,7 @@ class RunnerTests(unittest.TestCase):
             {"fire": "sometimes"},
             {"name": "../escape"},
             {"surprise": True},
+            {"extract": {"css": "a", "missing": "0"}},
         ]
         for change in bad:
             spec = copy.deepcopy(good)
@@ -256,7 +310,7 @@ class CommandLineTests(unittest.TestCase):
     def test_check_command_on_the_repo(self):
         out = subprocess.run([sys.executable, "-m", "agent_inbox", "check"], cwd=ROOT,
                              capture_output=True, text=True, check=True).stdout
-        self.assertIn("5 watchers (0 enabled)", out)
+        self.assertIn("8 watchers (3 enabled)", out)
 
 
 if __name__ == "__main__":

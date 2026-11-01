@@ -185,9 +185,19 @@ def _regex(spec: dict, text: str) -> list[Item]:
     except re.error as exc:
         raise ExtractError(f"bad regex: {exc}") from exc
     group = spec.get("group", 1 if pattern.groups else 0)
+    # A group inside an optional part of the pattern can take no part in a
+    # match. `missing` gives the value to use then, so one pattern can say
+    # "the page loaded, and has no rating yet" (missing: "0"). Without it,
+    # such matches are skipped.
+    missing = spec.get("missing")
     items = []
     for match in pattern.finditer(text):
-        value = _clip(match.group(group))
+        raw = match.group(group)
+        if raw is None:
+            if missing is None:
+                continue
+            raw = str(missing)
+        value = _clip(raw)
         items.append(Item(key=value, value=value))
     return items
 

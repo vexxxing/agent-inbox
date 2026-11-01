@@ -27,6 +27,10 @@ class EndToEndTests(unittest.TestCase):
         self.repo = self.tmp / "repo"
         shutil.copytree(ROOT, self.repo, ignore=shutil.ignore_patterns(
             "__pycache__", ".state", ".git", "tests"))
+        # A fresh copy of the template: without this repository's own
+        # watchers, which are on and would fetch real pages.
+        for own in (self.repo / "watchers").glob("avoidzero-*.yml"):
+            own.unlink()
         remote = self.tmp / "remote.git"
         git = lambda *a: subprocess.run(["git", *a], cwd=self.repo, check=True,  # noqa: E731
                                         capture_output=True)

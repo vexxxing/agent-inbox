@@ -92,6 +92,8 @@ A watcher is one YAML file in `watchers/`. Five examples ship, all turned off:
 | `weather-alert.yml` | Fires when tomorrow's rain chance is 70% or more (free Open-Meteo API) |
 | `order-status.yml` | Posts each status change of an order, then once when it's delivered |
 
+This repository also runs three watchers of its own, turned on, for an Android app on Google Play (`avoidzero-downloads.yml`, `avoidzero-ratings.yml`, `avoidzero-reviews.yml`): they post when its download tier changes, when its rating count changes, and once for each written review that shows on its listing. They read the public listing page every 2 hours. Delete them in your copy, or point them at your own app's listing (change the `id=` in each URL).
+
 A watcher, annotated:
 
 ```yaml
@@ -125,7 +127,7 @@ event:
 | `css` | HTML, with a CSS selector | `css: ".showtime"` |
 | `json` | JSON, with a simple path: dots, `[0]`, `[-1]`, `[*]`, `["odd key"]` | `json: daily.precipitation_probability_max[1]` |
 | `rss` | RSS 2.0 or Atom; each entry is an item. `field:` picks `title` (default), `summary` or `any` | `rss: true` |
-| `regex` | Raw text; the first capture group if there is one. `ignore_case: true` | `regex: "(\\d+) seats left"` |
+| `regex` | Raw text; the first capture group if there is one. `ignore_case: true`. `missing:` is the value to use when that group sits in an optional part of the pattern and took no part (the page loaded but has no rating yet); without it such matches are skipped | `regex: "(\\d+) seats left"` |
 
 **Conditions**: `exists` (true or false), `contains` and `not_contains` (a string or a list, any of which counts; case-insensitive), `matches` (regex), `below`, `above`, `at_most`, `at_least` (numbers, parsed from text), `equals`, `not_equals`, and `changed: true` (fires whenever the value differs from last time; the first check only records it).
 
